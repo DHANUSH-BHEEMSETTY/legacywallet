@@ -14,6 +14,101 @@ export type Database = {
   }
   public: {
     Tables: {
+      asset_allocations: {
+        Row: {
+          allocation_percentage: number
+          asset_id: string
+          created_at: string
+          id: string
+          notes: string | null
+          recipient_id: string
+        }
+        Insert: {
+          allocation_percentage: number
+          asset_id: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          recipient_id: string
+        }
+        Update: {
+          allocation_percentage?: number
+          asset_id?: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          recipient_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "asset_allocations_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "asset_allocations_recipient_id_fkey"
+            columns: ["recipient_id"]
+            isOneToOne: false
+            referencedRelation: "recipients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      assets: {
+        Row: {
+          category: Database["public"]["Enums"]["asset_category"]
+          created_at: string
+          currency: string | null
+          description: string | null
+          documents_url: string | null
+          estimated_value: number | null
+          id: string
+          location: string | null
+          name: string
+          updated_at: string
+          user_id: string
+          will_id: string | null
+        }
+        Insert: {
+          category?: Database["public"]["Enums"]["asset_category"]
+          created_at?: string
+          currency?: string | null
+          description?: string | null
+          documents_url?: string | null
+          estimated_value?: number | null
+          id?: string
+          location?: string | null
+          name: string
+          updated_at?: string
+          user_id: string
+          will_id?: string | null
+        }
+        Update: {
+          category?: Database["public"]["Enums"]["asset_category"]
+          created_at?: string
+          currency?: string | null
+          description?: string | null
+          documents_url?: string | null
+          estimated_value?: number | null
+          id?: string
+          location?: string | null
+          name?: string
+          updated_at?: string
+          user_id?: string
+          will_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assets_will_id_fkey"
+            columns: ["will_id"]
+            isOneToOne: false
+            referencedRelation: "wills"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -41,6 +136,93 @@ export type Database = {
         }
         Relationships: []
       }
+      recipients: {
+        Row: {
+          address: string | null
+          created_at: string
+          email: string | null
+          full_name: string
+          id: string
+          is_verified: boolean
+          phone: string | null
+          relationship: string | null
+          updated_at: string
+          user_id: string
+          verification_code: string | null
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string
+          email?: string | null
+          full_name: string
+          id?: string
+          is_verified?: boolean
+          phone?: string | null
+          relationship?: string | null
+          updated_at?: string
+          user_id: string
+          verification_code?: string | null
+        }
+        Update: {
+          address?: string | null
+          created_at?: string
+          email?: string | null
+          full_name?: string
+          id?: string
+          is_verified?: boolean
+          phone?: string | null
+          relationship?: string | null
+          updated_at?: string
+          user_id?: string
+          verification_code?: string | null
+        }
+        Relationships: []
+      }
+      wills: {
+        Row: {
+          audio_url: string | null
+          content: string | null
+          created_at: string
+          id: string
+          notes: string | null
+          status: Database["public"]["Enums"]["will_status"]
+          title: string
+          transcript: string | null
+          type: Database["public"]["Enums"]["will_type"]
+          updated_at: string
+          user_id: string
+          video_url: string | null
+        }
+        Insert: {
+          audio_url?: string | null
+          content?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          status?: Database["public"]["Enums"]["will_status"]
+          title?: string
+          transcript?: string | null
+          type?: Database["public"]["Enums"]["will_type"]
+          updated_at?: string
+          user_id: string
+          video_url?: string | null
+        }
+        Update: {
+          audio_url?: string | null
+          content?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          status?: Database["public"]["Enums"]["will_status"]
+          title?: string
+          transcript?: string | null
+          type?: Database["public"]["Enums"]["will_type"]
+          updated_at?: string
+          user_id?: string
+          video_url?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -49,7 +231,18 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      asset_category:
+        | "property"
+        | "investment"
+        | "bank_account"
+        | "vehicle"
+        | "jewelry"
+        | "digital_asset"
+        | "insurance"
+        | "business"
+        | "other"
+      will_status: "draft" | "in_progress" | "review" | "completed"
+      will_type: "audio" | "video" | "chat" | "text"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -176,6 +369,20 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      asset_category: [
+        "property",
+        "investment",
+        "bank_account",
+        "vehicle",
+        "jewelry",
+        "digital_asset",
+        "insurance",
+        "business",
+        "other",
+      ],
+      will_status: ["draft", "in_progress", "review", "completed"],
+      will_type: ["audio", "video", "chat", "text"],
+    },
   },
 } as const

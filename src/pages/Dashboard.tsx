@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
@@ -10,36 +10,75 @@ import {
   MessageSquare,
   FolderOpen,
   Users,
-  Settings,
-  Bell,
   Shield,
   ChevronRight,
-  MoreHorizontal,
   Clock,
+  Loader2,
 } from "lucide-react";
 import Header from "@/components/layout/Header";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+
+interface Will {
+  id: string;
+  title: string;
+  status: string;
+  type: string;
+  updated_at: string;
+}
 
 const Dashboard = () => {
-  const [wills] = useState([
-    {
-      id: 1,
-      title: "Primary Will",
-      status: "In Progress",
-      progress: 75,
-      lastUpdated: "2 hours ago",
-      assets: 12,
-      recipients: 5,
-    },
-    {
-      id: 2,
-      title: "Backup Digital Will",
-      status: "Draft",
-      progress: 30,
-      lastUpdated: "3 days ago",
-      assets: 4,
-      recipients: 2,
-    },
-  ]);
+  const { user } = useAuth();
+  const [wills, setWills] = useState<Will[]>([]);
+  const [assetCount, setAssetCount] = useState(0);
+  const [recipientCount, setRecipientCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (user) {
+      fetchData();
+    }
+  }, [user]);
+
+  const fetchData = async () => {
+    try {
+      const [willsRes, assetsRes, recipientsRes] = await Promise.all([
+        supabase.from("wills").select("*").order("updated_at", { ascending: false }),
+        supabase.from("assets").select("id", { count: "exact" }),
+        supabase.from("recipients").select("id", { count: "exact" }),
+      ]);
+
+      if (willsRes.data) setWills(willsRes.data);
+      if (assetsRes.count !== null) setAssetCount(assetsRes.count);
+      if (recipientsRes.count !== null) setRecipientCount(recipientsRes.count);
+    } catch (error) {
+      console.error("Error fetching data:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case "draft": return "Draft";
+      case "in_progress": return "In Progress";
+      case "review": return "Under Review";
+      case "completed": return "Completed";
+      default: return status;
+    }
+  };
+
+  const getTimeAgo = (date: string) => {
+    const now = new Date();
+    const updated = new Date(date);
+    const diff = now.getTime() - updated.getTime();
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const days = Math.floor(hours / 24);
+    
+    if (days > 0) return `${days} day${days > 1 ? 's' : ''} ago`;
+    if (hours > 0) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+    return "Just now";
+  };
 
   const quickActions = [
     { icon: Mic, label: "Record Audio", href: "/create/audio", color: "from-gold to-gold-light" },
@@ -49,11 +88,24 @@ const Dashboard = () => {
   ];
 
   const stats = [
-    { label: "Total Assets", value: "16", icon: FolderOpen },
-    { label: "Recipients", value: "7", icon: Users },
-    { label: "Media Files", value: "5", icon: Video },
-    { label: "Last Backup", value: "Today", icon: Shield },
+    { label: "Total Assets", value: assetCount.toString(), icon: FolderOpen },
+    { label: "Recipients", value: recipientCount.toString(), icon: Users },
+    { label: "Active Wills", value: wills.length.toString(), icon: FileText },
+    { label: "Secure", value: "Yes", icon: Shield },
   ];
+
+  const userName = user?.user_metadata?.full_name?.split(" ")[0] || "there";
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="pt-24 flex items-center justify-center">
+          <Loader2 className="w-8 h-8 animate-spin text-gold" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -67,7 +119,7 @@ const Dashboard = () => {
             animate={{ opacity: 1, y: 0 }}
             className="mb-8"
           >
-            <h1 className="heading-section text-foreground mb-2">Welcome back, John</h1>
+            <h1 className="heading-section text-foreground mb-2">Welcome back, {userName}</h1>
             <p className="text-muted-foreground">Manage your digital legacy with confidence.</p>
           </motion.div>
 
@@ -78,7 +130,7 @@ const Dashboard = () => {
             transition={{ delay: 0.1 }}
             className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8"
           >
-            {stats.map((stat, index) => (
+            {stats.map((stat) => (
               <div key={stat.label} className="card-elevated text-center">
                 <stat.icon className="w-6 h-6 text-gold mx-auto mb-2" />
                 <p className="font-serif text-2xl font-semibold text-foreground">{stat.value}</p>
@@ -137,37 +189,20 @@ const Dashboard = () => {
                       <div className="flex items-center gap-2 mb-1">
                         <h3 className="font-semibold text-foreground truncate">{will.title}</h3>
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                          will.status === "In Progress" 
+                          will.status === "in_progress" || will.status === "completed"
                             ? "bg-gold/20 text-gold" 
                             : "bg-secondary text-muted-foreground"
                         }`}>
-                          {will.status}
+                          {getStatusLabel(will.status)}
                         </span>
                       </div>
                       
                       <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <FolderOpen className="w-3 h-3" />
-                          {will.assets} assets
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Users className="w-3 h-3" />
-                          {will.recipients} recipients
-                        </span>
+                        <span className="capitalize">{will.type} will</span>
                         <span className="flex items-center gap-1">
                           <Clock className="w-3 h-3" />
-                          {will.lastUpdated}
+                          {getTimeAgo(will.updated_at)}
                         </span>
-                      </div>
-
-                      {/* Progress Bar */}
-                      <div className="mt-2">
-                        <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-gradient-to-r from-gold to-gold-light rounded-full transition-all duration-500"
-                            style={{ width: `${will.progress}%` }}
-                          />
-                        </div>
                       </div>
                     </div>
 

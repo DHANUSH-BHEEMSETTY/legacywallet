@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
@@ -15,41 +15,30 @@ import {
   X,
   UserPlus,
   Shield,
+  Loader2,
 } from "lucide-react";
 import Header from "@/components/layout/Header";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 interface Recipient {
-  id: number;
-  name: string;
-  email: string;
-  phone: string;
-  relationship: string;
-  verified: boolean;
+  id: string;
+  full_name: string;
+  email: string | null;
+  phone: string | null;
+  relationship: string | null;
+  is_verified: boolean;
 }
 
 const Recipients = () => {
-  const [recipients, setRecipients] = useState<Recipient[]>([
-    {
-      id: 1,
-      name: "Sarah Johnson",
-      email: "sarah@email.com",
-      phone: "+1 555-0123",
-      relationship: "Daughter",
-      verified: true,
-    },
-    {
-      id: 2,
-      name: "Michael Johnson",
-      email: "michael@email.com",
-      phone: "+1 555-0124",
-      relationship: "Son",
-      verified: false,
-    },
-  ]);
-
+  const { user } = useAuth();
+  const [recipients, setRecipients] = useState<Recipient[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newRecipient, setNewRecipient] = useState({
-    name: "",
+    full_name: "",
     email: "",
     phone: "",
     relationship: "",
@@ -57,24 +46,84 @@ const Recipients = () => {
 
   const relationships = ["Spouse", "Child", "Sibling", "Parent", "Friend", "Charity", "Other"];
 
-  const handleAddRecipient = () => {
-    if (newRecipient.name && newRecipient.email) {
-      setRecipients([
-        ...recipients,
-        {
-          id: Date.now(),
-          ...newRecipient,
-          verified: false,
-        },
-      ]);
-      setNewRecipient({ name: "", email: "", phone: "", relationship: "" });
-      setShowAddModal(false);
+  useEffect(() => {
+    if (user) fetchRecipients();
+  }, [user]);
+
+  const fetchRecipients = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("recipients")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      if (data) setRecipients(data);
+    } catch (error) {
+      console.error("Error fetching recipients:", error);
+      toast.error("Failed to load recipients");
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleDeleteRecipient = (id: number) => {
-    setRecipients(recipients.filter((r) => r.id !== id));
+  const handleAddRecipient = async () => {
+    if (!newRecipient.full_name || !user) {
+      toast.error("Please enter a name");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const { data, error } = await supabase
+        .from("recipients")
+        .insert({
+          user_id: user.id,
+          full_name: newRecipient.full_name,
+          email: newRecipient.email || null,
+          phone: newRecipient.phone || null,
+          relationship: newRecipient.relationship || null,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      
+      setRecipients([data, ...recipients]);
+      setNewRecipient({ full_name: "", email: "", phone: "", relationship: "" });
+      setShowAddModal(false);
+      toast.success("Recipient added successfully");
+    } catch (error) {
+      console.error("Error adding recipient:", error);
+      toast.error("Failed to add recipient");
+    } finally {
+      setSaving(false);
+    }
   };
+
+  const handleDeleteRecipient = async (id: string) => {
+    try {
+      const { error } = await supabase.from("recipients").delete().eq("id", id);
+      if (error) throw error;
+      
+      setRecipients(recipients.filter((r) => r.id !== id));
+      toast.success("Recipient removed");
+    } catch (error) {
+      console.error("Error deleting recipient:", error);
+      toast.error("Failed to remove recipient");
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="pt-24 flex items-center justify-center">
+          <Loader2 className="w-8 h-8 animate-spin text-gold" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -127,15 +176,17 @@ const Recipients = () => {
               <div key={recipient.id} className="card-elevated">
                 <div className="flex items-start gap-4">
                   <div className="w-12 h-12 rounded-full bg-gradient-to-br from-navy to-navy-light flex items-center justify-center text-primary-foreground font-semibold text-lg">
-                    {recipient.name.charAt(0)}
+                    {recipient.full_name.charAt(0)}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-semibold text-foreground">{recipient.name}</h3>
-                      <span className="px-2 py-0.5 rounded-full bg-secondary text-xs font-medium text-secondary-foreground">
-                        {recipient.relationship}
-                      </span>
-                      {recipient.verified && (
+                      <h3 className="font-semibold text-foreground">{recipient.full_name}</h3>
+                      {recipient.relationship && (
+                        <span className="px-2 py-0.5 rounded-full bg-secondary text-xs font-medium text-secondary-foreground">
+                          {recipient.relationship}
+                        </span>
+                      )}
+                      {recipient.is_verified && (
                         <span className="px-2 py-0.5 rounded-full bg-sage text-xs font-medium text-foreground flex items-center gap-1">
                           <Check className="w-3 h-3" />
                           Verified
@@ -143,10 +194,12 @@ const Recipients = () => {
                       )}
                     </div>
                     <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <Mail className="w-4 h-4" />
-                        {recipient.email}
-                      </span>
+                      {recipient.email && (
+                        <span className="flex items-center gap-1">
+                          <Mail className="w-4 h-4" />
+                          {recipient.email}
+                        </span>
+                      )}
                       {recipient.phone && (
                         <span className="flex items-center gap-1">
                           <Phone className="w-4 h-4" />
@@ -156,7 +209,7 @@ const Recipients = () => {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {!recipient.verified && (
+                    {!recipient.is_verified && (
                       <Button variant="outline" size="sm">
                         Send Invite
                       </Button>
@@ -246,15 +299,15 @@ const Recipients = () => {
                   <label className="block text-sm font-medium text-foreground mb-2">Full Name</label>
                   <input
                     type="text"
-                    value={newRecipient.name}
-                    onChange={(e) => setNewRecipient({ ...newRecipient, name: e.target.value })}
+                    value={newRecipient.full_name}
+                    onChange={(e) => setNewRecipient({ ...newRecipient, full_name: e.target.value })}
                     placeholder="e.g., John Smith"
                     className="input-elevated"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">Email Address</label>
+                  <label className="block text-sm font-medium text-foreground mb-2">Email Address (Optional)</label>
                   <input
                     type="email"
                     value={newRecipient.email}
@@ -299,8 +352,8 @@ const Recipients = () => {
                 <Button variant="ghost" className="flex-1" onClick={() => setShowAddModal(false)}>
                   Cancel
                 </Button>
-                <Button variant="gold" className="flex-1" onClick={handleAddRecipient}>
-                  Add Recipient
+                <Button variant="gold" className="flex-1" onClick={handleAddRecipient} disabled={saving}>
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Add Recipient"}
                 </Button>
               </div>
             </motion.div>

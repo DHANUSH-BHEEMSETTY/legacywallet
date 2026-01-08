@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
@@ -16,79 +16,141 @@ import {
   Check,
   Users,
   X,
+  Loader2,
+  Building,
+  Gem,
+  Briefcase,
+  FileText,
 } from "lucide-react";
 import Header from "@/components/layout/Header";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
-type AssetCategory = "property" | "vehicle" | "financial" | "digital" | "other";
+type AssetCategory = "property" | "investment" | "bank_account" | "vehicle" | "jewelry" | "digital_asset" | "insurance" | "business" | "other";
 
 interface Asset {
-  id: number;
+  id: string;
   name: string;
   category: AssetCategory;
-  value: string;
-  description: string;
-  recipients: { name: string; share: number }[];
+  estimated_value: number | null;
+  description: string | null;
+  location: string | null;
 }
 
 const AssetManagement = () => {
-  const [assets, setAssets] = useState<Asset[]>([
-    {
-      id: 1,
-      name: "Family Home",
-      category: "property",
-      value: "$450,000",
-      description: "123 Main Street, Springfield",
-      recipients: [{ name: "Sarah", share: 50 }, { name: "Michael", share: 50 }],
-    },
-    {
-      id: 2,
-      name: "Investment Portfolio",
-      category: "financial",
-      value: "$125,000",
-      description: "Stocks and bonds at Fidelity",
-      recipients: [{ name: "Sarah", share: 100 }],
-    },
-  ]);
-
+  const { user } = useAuth();
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newAsset, setNewAsset] = useState({
     name: "",
     category: "property" as AssetCategory,
-    value: "",
+    estimated_value: "",
     description: "",
   });
 
   const categories = [
     { id: "property", icon: Home, label: "Property" },
     { id: "vehicle", icon: Car, label: "Vehicle" },
-    { id: "financial", icon: Wallet, label: "Financial" },
-    { id: "digital", icon: Smartphone, label: "Digital" },
+    { id: "bank_account", icon: Wallet, label: "Bank" },
+    { id: "investment", icon: Building, label: "Investment" },
+    { id: "jewelry", icon: Gem, label: "Jewelry" },
+    { id: "digital_asset", icon: Smartphone, label: "Digital" },
+    { id: "insurance", icon: FileText, label: "Insurance" },
+    { id: "business", icon: Briefcase, label: "Business" },
     { id: "other", icon: Package, label: "Other" },
   ];
+
+  useEffect(() => {
+    if (user) fetchAssets();
+  }, [user]);
+
+  const fetchAssets = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("assets")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      if (data) setAssets(data);
+    } catch (error) {
+      console.error("Error fetching assets:", error);
+      toast.error("Failed to load assets");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getCategoryIcon = (category: AssetCategory) => {
     const cat = categories.find((c) => c.id === category);
     return cat?.icon || Package;
   };
 
-  const handleAddAsset = () => {
-    if (newAsset.name && newAsset.value) {
-      setAssets([
-        ...assets,
-        {
-          id: Date.now(),
-          ...newAsset,
-          recipients: [],
-        },
-      ]);
-      setNewAsset({ name: "", category: "property", value: "", description: "" });
+  const handleAddAsset = async () => {
+    if (!newAsset.name || !user) {
+      toast.error("Please enter an asset name");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const { data, error } = await supabase
+        .from("assets")
+        .insert({
+          user_id: user.id,
+          name: newAsset.name,
+          category: newAsset.category,
+          estimated_value: newAsset.estimated_value ? parseFloat(newAsset.estimated_value.replace(/[^0-9.]/g, "")) : null,
+          description: newAsset.description || null,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      
+      setAssets([data, ...assets]);
+      setNewAsset({ name: "", category: "property", estimated_value: "", description: "" });
       setShowAddModal(false);
+      toast.success("Asset added successfully");
+    } catch (error) {
+      console.error("Error adding asset:", error);
+      toast.error("Failed to add asset");
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleDeleteAsset = (id: number) => {
-    setAssets(assets.filter((a) => a.id !== id));
+  const handleDeleteAsset = async (id: string) => {
+    try {
+      const { error } = await supabase.from("assets").delete().eq("id", id);
+      if (error) throw error;
+      
+      setAssets(assets.filter((a) => a.id !== id));
+      toast.success("Asset deleted");
+    } catch (error) {
+      console.error("Error deleting asset:", error);
+      toast.error("Failed to delete asset");
+    }
   };
+
+  const formatCurrency = (value: number | null) => {
+    if (!value) return "—";
+    return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="pt-24 flex items-center justify-center">
+          <Loader2 className="w-8 h-8 animate-spin text-gold" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -97,9 +159,9 @@ const AssetManagement = () => {
       <main className="pt-24 pb-12 px-4">
         <div className="container mx-auto max-w-4xl">
           {/* Back Button */}
-          <Link to="/create/audio" className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-6">
+          <Link to="/dashboard" className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-6">
             <ArrowLeft className="w-4 h-4" />
-            Back to Recording
+            Back to Dashboard
           </Link>
 
           {/* Progress Indicator */}
@@ -138,17 +200,8 @@ const AssetManagement = () => {
             className="flex flex-wrap gap-2 mb-6"
           >
             <button className="px-4 py-2 rounded-full bg-gold text-primary text-sm font-medium">
-              All Assets
+              All Assets ({assets.length})
             </button>
-            {categories.map((cat) => (
-              <button
-                key={cat.id}
-                className="px-4 py-2 rounded-full bg-secondary text-secondary-foreground text-sm font-medium hover:bg-secondary/80 transition-colors flex items-center gap-2"
-              >
-                <cat.icon className="w-4 h-4" />
-                {cat.label}
-              </button>
-            ))}
           </motion.div>
 
           {/* Assets List */}
@@ -169,20 +222,15 @@ const AssetManagement = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
                         <h3 className="font-semibold text-foreground">{asset.name}</h3>
-                        <span className="font-serif text-lg font-semibold text-gold">{asset.value}</span>
+                        <span className="font-serif text-lg font-semibold text-gold">
+                          {formatCurrency(asset.estimated_value)}
+                        </span>
                       </div>
-                      <p className="text-sm text-muted-foreground mb-3">{asset.description}</p>
-                      
-                      {/* Recipients */}
-                      {asset.recipients.length > 0 && (
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <Users className="w-4 h-4 text-muted-foreground" />
-                          {asset.recipients.map((r, i) => (
-                            <span key={i} className="px-2 py-1 rounded-full bg-secondary text-xs font-medium">
-                              {r.name}: {r.share}%
-                            </span>
-                          ))}
-                        </div>
+                      <p className="text-sm text-muted-foreground mb-2 capitalize">
+                        {asset.category.replace("_", " ")}
+                      </p>
+                      {asset.description && (
+                        <p className="text-sm text-muted-foreground">{asset.description}</p>
                       )}
                     </div>
                     <div className="flex items-center gap-2">
@@ -221,7 +269,7 @@ const AssetManagement = () => {
             transition={{ delay: 0.3 }}
             className="flex items-center justify-between"
           >
-            <Link to="/create/audio">
+            <Link to="/dashboard">
               <Button variant="ghost" className="gap-2">
                 <ArrowLeft className="w-4 h-4" />
                 Back
@@ -275,8 +323,8 @@ const AssetManagement = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-2">Category</label>
-                  <div className="grid grid-cols-5 gap-2">
-                    {categories.map((cat) => (
+                  <div className="grid grid-cols-3 gap-2">
+                    {categories.slice(0, 6).map((cat) => (
                       <button
                         key={cat.id}
                         onClick={() => setNewAsset({ ...newAsset, category: cat.id as AssetCategory })}
@@ -297,8 +345,8 @@ const AssetManagement = () => {
                   <label className="block text-sm font-medium text-foreground mb-2">Estimated Value</label>
                   <input
                     type="text"
-                    value={newAsset.value}
-                    onChange={(e) => setNewAsset({ ...newAsset, value: e.target.value })}
+                    value={newAsset.estimated_value}
+                    onChange={(e) => setNewAsset({ ...newAsset, estimated_value: e.target.value })}
                     placeholder="e.g., $100,000"
                     className="input-elevated"
                   />
@@ -320,8 +368,8 @@ const AssetManagement = () => {
                 <Button variant="ghost" className="flex-1" onClick={() => setShowAddModal(false)}>
                   Cancel
                 </Button>
-                <Button variant="gold" className="flex-1" onClick={handleAddAsset}>
-                  Add Asset
+                <Button variant="gold" className="flex-1" onClick={handleAddAsset} disabled={saving}>
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Add Asset"}
                 </Button>
               </div>
             </motion.div>
