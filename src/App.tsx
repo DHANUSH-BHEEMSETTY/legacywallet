@@ -10,6 +10,7 @@ import Dashboard from "./pages/Dashboard";
 import CreateWill from "./pages/CreateWill";
 import CreateAudioWill from "./pages/CreateAudioWill";
 import CreateVideoWill from "./pages/CreateVideoWill";
+import CreateChatWill from "./pages/CreateChatWill";
 import AssetManagement from "./pages/AssetManagement";
 import Recipients from "./pages/Recipients";
 import ReviewWill from "./pages/ReviewWill";
@@ -37,7 +38,7 @@ const App = () => (
             <Route path="/create" element={<ProtectedRoute><CreateWill /></ProtectedRoute>} />
             <Route path="/create/audio" element={<ProtectedRoute><CreateAudioWill /></ProtectedRoute>} />
             <Route path="/create/video" element={<ProtectedRoute><CreateVideoWill /></ProtectedRoute>} />
-            <Route path="/create/chat" element={<ProtectedRoute><CreateAudioWill /></ProtectedRoute>} />
+            <Route path="/create/chat" element={<ProtectedRoute><CreateChatWill /></ProtectedRoute>} />
             <Route path="/assets" element={<ProtectedRoute><AssetManagement /></ProtectedRoute>} />
             <Route path="/recipients" element={<ProtectedRoute><Recipients /></ProtectedRoute>} />
             <Route path="/review" element={<ProtectedRoute><ReviewWill /></ProtectedRoute>} />
