@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { motion } from "framer-motion";
 import {
   Plus,
@@ -14,10 +16,19 @@ import {
   ChevronRight,
   Clock,
   Loader2,
+  BarChart3,
+  PieChart,
+  TrendingUp,
 } from "lucide-react";
 import Header from "@/components/layout/Header";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart";
+import { PieChart as RechartsPieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis } from "recharts";
 
 interface Will {
   id: string;
@@ -27,9 +38,25 @@ interface Will {
   updated_at: string;
 }
 
+interface Asset {
+  id: string;
+  name: string;
+  category: string;
+  estimated_value: number | null;
+  currency: string | null;
+}
+
+interface WillStatusStats {
+  draft: number;
+  in_progress: number;
+  review: number;
+  completed: number;
+}
+
 const Dashboard = () => {
   const { user } = useAuth();
   const [wills, setWills] = useState<Will[]>([]);
+  const [assets, setAssets] = useState<Asset[]>([]);
   const [assetCount, setAssetCount] = useState(0);
   const [recipientCount, setRecipientCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -44,18 +71,97 @@ const Dashboard = () => {
     try {
       const [willsRes, assetsRes, recipientsRes] = await Promise.all([
         supabase.from("wills").select("*").order("updated_at", { ascending: false }),
-        supabase.from("assets").select("id", { count: "exact" }),
+        supabase.from("assets").select("id, name, category, estimated_value, currency"),
         supabase.from("recipients").select("id", { count: "exact" }),
       ]);
 
       if (willsRes.data) setWills(willsRes.data);
-      if (assetsRes.count !== null) setAssetCount(assetsRes.count);
+      if (assetsRes.data) {
+        setAssets(assetsRes.data);
+        setAssetCount(assetsRes.data.length);
+      }
       if (recipientsRes.count !== null) setRecipientCount(recipientsRes.count);
     } catch (error) {
       console.error("Error fetching data:", error);
     } finally {
       setLoading(false);
     }
+  };
+
+  // Calculate will completion statistics
+  const willStatusStats: WillStatusStats = wills.reduce(
+    (acc, will) => {
+      const status = will.status as keyof WillStatusStats;
+      if (status in acc) {
+        acc[status]++;
+      }
+      return acc;
+    },
+    { draft: 0, in_progress: 0, review: 0, completed: 0 }
+  );
+
+  const totalWills = wills.length;
+  const completedWills = willStatusStats.completed;
+  const completionPercentage = totalWills > 0 ? Math.round((completedWills / totalWills) * 100) : 0;
+
+  // Prepare will status data for chart
+  const willStatusData = [
+    { name: "Draft", value: willStatusStats.draft, fill: "#94a3b8" },
+    { name: "In Progress", value: willStatusStats.in_progress, fill: "#fbbf24" },
+    { name: "Under Review", value: willStatusStats.review, fill: "#3b82f6" },
+    { name: "Completed", value: willStatusStats.completed, fill: "#10b981" },
+  ].filter(item => item.value > 0);
+
+  // Calculate asset distribution by category
+  const assetCategoryData = assets.reduce((acc, asset) => {
+    const category = asset.category || "other";
+    const existing = acc.find(item => item.name === category);
+    if (existing) {
+      existing.count++;
+      existing.value += asset.estimated_value || 0;
+    } else {
+      acc.push({
+        name: category.replace("_", " ").replace(/\b\w/g, l => l.toUpperCase()),
+        count: 1,
+        value: asset.estimated_value || 0,
+        fill: getCategoryColor(category),
+      });
+    }
+    return acc;
+  }, [] as Array<{ name: string; count: number; value: number; fill: string }>);
+
+  // Calculate asset distribution by value
+  const assetValueData = assetCategoryData
+    .map(item => ({
+      name: item.name,
+      value: item.value,
+      fill: item.fill,
+    }))
+    .sort((a, b) => b.value - a.value)
+    .filter(item => item.value > 0);
+
+  function getCategoryColor(category: string): string {
+    const colors: Record<string, string> = {
+      property: "#8b5cf6",
+      investment: "#06b6d4",
+      bank_account: "#10b981",
+      vehicle: "#f59e0b",
+      jewelry: "#ec4899",
+      digital_asset: "#6366f1",
+      insurance: "#14b8a6",
+      business: "#f97316",
+      other: "#64748b",
+    };
+    return colors[category] || "#64748b";
+  }
+
+  const chartConfig = {
+    count: {
+      label: "Count",
+    },
+    value: {
+      label: "Value",
+    },
   };
 
   const getStatusLabel = (status: string) => {
@@ -139,11 +245,202 @@ const Dashboard = () => {
             ))}
           </motion.div>
 
-          {/* Quick Actions */}
+          {/* Analytics Section */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
+            className="mb-8"
+          >
+            <div className="flex items-center gap-2 mb-6">
+              <BarChart3 className="w-5 h-5 text-gold" />
+              <h2 className="font-serif text-xl font-semibold text-foreground">Analytics</h2>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+              {/* Will Completion Progress */}
+              <Card className="card-elevated">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="flex items-center gap-2">
+                        <TrendingUp className="w-5 h-5 text-gold" />
+                        Will Completion Progress
+                      </CardTitle>
+                      <CardDescription className="mt-2">
+                        {completedWills} of {totalWills} wills completed
+                      </CardDescription>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-3xl font-bold text-foreground">{completionPercentage}%</div>
+                      <div className="text-sm text-muted-foreground">Completion Rate</div>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <Progress 
+                      value={completionPercentage} 
+                      className="h-3 [&>div]:bg-gradient-to-r [&>div]:from-gold [&>div]:to-gold-light" 
+                    />
+                    <div className="space-y-3">
+                      {willStatusData.length > 0 ? (
+                        <ChartContainer config={chartConfig} className="h-[200px]">
+                          <RechartsPieChart>
+                            <Pie
+                              data={willStatusData}
+                              cx="50%"
+                              cy="50%"
+                              labelLine={false}
+                              label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                              outerRadius={70}
+                              fill="#8884d8"
+                              dataKey="value"
+                            >
+                              {willStatusData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.fill} />
+                              ))}
+                            </Pie>
+                            <ChartTooltip content={<ChartTooltipContent />} />
+                          </RechartsPieChart>
+                        </ChartContainer>
+                      ) : (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <FileText className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                          <p>No will data available</p>
+                        </div>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 pt-2">
+                      {willStatusData.map((item) => (
+                        <div key={item.name} className="flex items-center gap-2 text-sm">
+                          <div
+                            className="w-3 h-3 rounded-full"
+                            style={{ backgroundColor: item.fill }}
+                          />
+                          <span className="text-muted-foreground">{item.name}:</span>
+                          <span className="font-semibold text-foreground">{item.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Asset Distribution by Category */}
+              <Card className="card-elevated">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <PieChart className="w-5 h-5 text-gold" />
+                    Asset Distribution by Category
+                  </CardTitle>
+                  <CardDescription>
+                    {assetCount} total assets across {assetCategoryData.length} categories
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {assetCategoryData.length > 0 ? (
+                    <ChartContainer config={chartConfig} className="h-[200px]">
+                      <RechartsPieChart>
+                        <Pie
+                          data={assetCategoryData}
+                          cx="50%"
+                          cy="50%"
+                          labelLine={false}
+                          label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                          outerRadius={70}
+                          fill="#8884d8"
+                          dataKey="count"
+                        >
+                          {assetCategoryData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.fill} />
+                          ))}
+                        </Pie>
+                        <ChartTooltip content={<ChartTooltipContent />} />
+                      </RechartsPieChart>
+                    </ChartContainer>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <FolderOpen className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                      <p>No assets available</p>
+                    </div>
+                  )}
+                  <div className="mt-4 space-y-2">
+                    {assetCategoryData.slice(0, 4).map((item) => (
+                      <div key={item.name} className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="w-3 h-3 rounded-full"
+                            style={{ backgroundColor: item.fill }}
+                          />
+                          <span className="text-muted-foreground">{item.name}</span>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <span className="font-semibold text-foreground">{item.count}</span>
+                          {item.value > 0 && (
+                            <span className="text-muted-foreground text-xs">
+                              ${item.value.toLocaleString()}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Asset Value Distribution */}
+            {assetValueData.length > 0 && (
+              <Card className="card-elevated">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <BarChart3 className="w-5 h-5 text-gold" />
+                    Asset Value Distribution
+                  </CardTitle>
+                  <CardDescription>
+                    Total estimated value: ${assetValueData.reduce((sum, item) => sum + item.value, 0).toLocaleString()}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ChartContainer config={chartConfig} className="h-[300px]">
+                    <BarChart data={assetValueData}>
+                      <XAxis
+                        dataKey="name"
+                        tickLine={false}
+                        axisLine={false}
+                        tickMargin={8}
+                        angle={-45}
+                        textAnchor="end"
+                        height={80}
+                      />
+                      <YAxis
+                        tickLine={false}
+                        axisLine={false}
+                        tickMargin={8}
+                        tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
+                      />
+                      <ChartTooltip
+                        content={<ChartTooltipContent />}
+                        formatter={(value: number) => `$${value.toLocaleString()}`}
+                      />
+                      <Bar dataKey="value" radius={[8, 8, 0, 0]}>
+                        {assetValueData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.fill} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ChartContainer>
+                </CardContent>
+              </Card>
+            )}
+          </motion.div>
+
+          {/* Quick Actions */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
             className="mb-8"
           >
             <h2 className="font-serif text-xl font-semibold text-foreground mb-4">Quick Actions</h2>
@@ -165,7 +462,7 @@ const Dashboard = () => {
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
+            transition={{ delay: 0.4 }}
           >
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-serif text-xl font-semibold text-foreground">My Wills</h2>
