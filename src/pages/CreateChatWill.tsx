@@ -19,6 +19,7 @@ import Header from "@/components/layout/Header";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { chatMessageSchema, willTranscriptSchema } from "@/lib/validations";
 
 type Message = { role: "user" | "assistant"; content: string };
 
@@ -74,7 +75,14 @@ const CreateChatWill = () => {
   const sendMessage = async () => {
     if (!input.trim() || isLoading) return;
 
-    const userMsg: Message = { role: "user", content: input.trim() };
+    // Validate message
+    const validation = chatMessageSchema.safeParse(input.trim());
+    if (!validation.success) {
+      toast.error(validation.error.errors[0].message);
+      return;
+    }
+
+    const userMsg: Message = { role: "user", content: validation.data };
     const updatedMessages = [...messages, userMsg];
     setMessages(updatedMessages);
     setInput("");
@@ -194,6 +202,14 @@ const CreateChatWill = () => {
       const transcript = messages
         .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
         .join("\n\n");
+
+      // Validate transcript length
+      const transcriptValidation = willTranscriptSchema.safeParse(transcript);
+      if (!transcriptValidation.success) {
+        toast.error(transcriptValidation.error.errors[0].message);
+        setIsSaving(false);
+        return;
+      }
 
       // Check for existing chat will
       const { data: existingWill } = await supabase

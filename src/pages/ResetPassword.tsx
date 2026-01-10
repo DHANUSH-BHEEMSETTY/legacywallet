@@ -7,7 +7,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { z } from "zod";
 
-const passwordSchema = z.string().min(6, { message: "Password must be at least 6 characters" });
+const passwordSchema = z.string()
+  .min(8, { message: "Password must be at least 8 characters" })
+  .max(128, { message: "Password must be less than 128 characters" });
 
 const ResetPassword = () => {
   const navigate = useNavigate();

@@ -31,6 +31,7 @@ import Header from "@/components/layout/Header";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { assetSchema, validateDocumentFile } from "@/lib/validations";
 
 type AssetCategory = "property" | "investment" | "bank_account" | "vehicle" | "jewelry" | "digital_asset" | "insurance" | "business" | "other";
 
@@ -130,10 +131,30 @@ const AssetManagement = () => {
   };
 
   const handleAddAsset = async () => {
-    if (!newAsset.name || !user) {
-      toast.error("Please enter an asset name");
+    if (!user) {
+      toast.error("You must be logged in");
       return;
     }
+
+    // Validate input
+    const parsedValue = newAsset.estimated_value 
+      ? parseFloat(newAsset.estimated_value.replace(/[^0-9.]/g, "")) 
+      : null;
+
+    const validation = assetSchema.safeParse({
+      name: newAsset.name.trim(),
+      description: newAsset.description.trim() || undefined,
+      estimated_value: parsedValue,
+      category: newAsset.category,
+    });
+
+    if (!validation.success) {
+      const firstError = validation.error.errors[0];
+      toast.error(firstError.message);
+      return;
+    }
+
+    const validatedData = validation.data;
 
     setSaving(true);
     try {
@@ -141,10 +162,10 @@ const AssetManagement = () => {
         .from("assets")
         .insert({
           user_id: user.id,
-          name: newAsset.name,
-          category: newAsset.category,
-          estimated_value: newAsset.estimated_value ? parseFloat(newAsset.estimated_value.replace(/[^0-9.]/g, "")) : null,
-          description: newAsset.description || null,
+          name: validatedData.name,
+          category: validatedData.category,
+          estimated_value: validatedData.estimated_value,
+          description: validatedData.description || null,
         })
         .select()
         .single();
@@ -265,6 +286,13 @@ const AssetManagement = () => {
 
   const handleFileUpload = async (assetId: string, file: File) => {
     if (!user) return;
+
+    // Validate file
+    const fileValidation = validateDocumentFile(file);
+    if (!fileValidation.valid) {
+      toast.error(fileValidation.error);
+      return;
+    }
 
     setUploadingAssetId(assetId);
     try {
