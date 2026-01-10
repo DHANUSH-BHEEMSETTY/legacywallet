@@ -21,6 +21,7 @@ import Header from "@/components/layout/Header";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { recipientSchema } from "@/lib/validations";
 
 interface Recipient {
   id: string;
@@ -68,10 +69,26 @@ const Recipients = () => {
   };
 
   const handleAddRecipient = async () => {
-    if (!newRecipient.full_name || !user) {
-      toast.error("Please enter a name");
+    if (!user) {
+      toast.error("You must be logged in");
       return;
     }
+
+    // Validate input
+    const validation = recipientSchema.safeParse({
+      full_name: newRecipient.full_name.trim(),
+      email: newRecipient.email.trim() || undefined,
+      phone: newRecipient.phone.trim() || undefined,
+      relationship: newRecipient.relationship || undefined,
+    });
+
+    if (!validation.success) {
+      const firstError = validation.error.errors[0];
+      toast.error(firstError.message);
+      return;
+    }
+
+    const validatedData = validation.data;
 
     setSaving(true);
     try {
@@ -79,10 +96,10 @@ const Recipients = () => {
         .from("recipients")
         .insert({
           user_id: user.id,
-          full_name: newRecipient.full_name,
-          email: newRecipient.email || null,
-          phone: newRecipient.phone || null,
-          relationship: newRecipient.relationship || null,
+          full_name: validatedData.full_name,
+          email: validatedData.email || null,
+          phone: validatedData.phone || null,
+          relationship: validatedData.relationship || null,
         })
         .select()
         .single();

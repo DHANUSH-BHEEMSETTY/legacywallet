@@ -14,6 +14,16 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { z } from "zod";
+
+const loginSchema = z.object({
+  email: z.string().trim().email("Invalid email address").max(255),
+  password: z.string().min(8, "Password must be at least 8 characters").max(128),
+});
+
+const signupSchema = loginSchema.extend({
+  fullName: z.string().trim().min(2, "Name must be at least 2 characters").max(100, "Name must be less than 100 characters"),
+});
 
 const Login = () => {
   const navigate = useNavigate();
@@ -36,18 +46,17 @@ const Login = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!email || !password) {
-      toast.error("Please fill in all required fields");
-      return;
-    }
+    // Validate input using zod schema
+    const schema = isLogin ? loginSchema : signupSchema;
+    const validation = schema.safeParse({
+      email: email.trim(),
+      password,
+      ...(isLogin ? {} : { fullName: fullName.trim() }),
+    });
 
-    if (!isLogin && !fullName) {
-      toast.error("Please enter your full name");
-      return;
-    }
-
-    if (password.length < 6) {
-      toast.error("Password must be at least 6 characters");
+    if (!validation.success) {
+      const firstError = validation.error.errors[0];
+      toast.error(firstError.message);
       return;
     }
 

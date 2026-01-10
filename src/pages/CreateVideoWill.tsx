@@ -21,6 +21,7 @@ import Header from "@/components/layout/Header";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { validateVideoFile } from "@/lib/validations";
 
 const CreateVideoWill = () => {
   const { user } = useAuth();
@@ -166,6 +167,13 @@ const CreateVideoWill = () => {
   const handleSaveAndContinue = async () => {
     if (!recordedBlob || !user) {
       toast.error("No recording to save");
+      return;
+    }
+
+    // Validate video file
+    const videoValidation = validateVideoFile(recordedBlob);
+    if (!videoValidation.valid) {
+      toast.error(videoValidation.error);
       return;
     }
 
