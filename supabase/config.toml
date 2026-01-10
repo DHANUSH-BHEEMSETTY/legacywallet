@@ -1,1 +1,7 @@
 project_id = "xagonodpwvhhrypnolif"
+
+[functions.will-chat]
+verify_jwt = false
+
+[functions.notify-recipients]
+verify_jwt = false

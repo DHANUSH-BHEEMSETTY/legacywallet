@@ -196,12 +196,44 @@ const ReviewWill = () => {
 
     setIsSubmitting(true);
     try {
+      // Update will status
       const { error } = await supabase
         .from("wills")
         .update({ status: "completed" })
         .eq("id", will.id);
 
       if (error) throw error;
+
+      // Get user profile for owner name
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("user_id", user?.id)
+        .maybeSingle();
+
+      const ownerName = profile?.full_name || "A LegacyVault user";
+
+      // Send email notifications to recipients
+      if (recipients.length > 0) {
+        const { data: notifyResult, error: notifyError } = await supabase.functions.invoke(
+          "notify-recipients",
+          {
+            body: {
+              willId: will.id,
+              willTitle: will.title,
+              ownerName,
+            },
+          }
+        );
+
+        if (notifyError) {
+          console.error("Error sending notifications:", notifyError);
+          toast.warning("Will finalized, but some notifications may not have been sent");
+        } else if (notifyResult?.sent > 0) {
+          toast.success(`Notifications sent to ${notifyResult.sent} recipient(s)`);
+        }
+      }
+
       navigate("/confirmation");
     } catch (error) {
       console.error("Error finalizing will:", error);
